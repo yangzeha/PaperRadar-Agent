@@ -20,7 +20,9 @@
 - 记忆 API：topics、saved papers、history。
 - 国内模型：DeepSeek 和 Qwen/DashScope 走 OpenAI-compatible API。
 - 前端状态提示：页面会显示当前为 mock 演示模式，或显示真实 provider 名称。
-- ![Uploading image.png…]()
+<img width="223" height="456" alt="image" src="https://github.com/user-attachments/assets/b86850a1-136e-4476-ad5a-0ee3400d72a5" />
+
+
 
 
 ## PaperRadar 报告质量标准
@@ -35,7 +37,6 @@ PaperRadar 不是简单论文列表，而是“方向雷达”。合格报告必
 - “两周阅读路线”必须按学习目标安排，不按论文编号机械排序。
 - “可做小项目建议”必须贴合 Agentic RAG、LangGraph、RAG、多 Agent、长短期记忆、citation grounding 或 query rewrite。
 - “参考来源”必须尽量包含 title、authors、year/published date、source、url。
-- mock 模式和 real 模式都必须遵守同一报告结构；mock 只影响数据来源，不降低报告结构要求。
 
 ## Windows 安装
 
