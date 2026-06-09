@@ -1,0 +1,7 @@
+{
+  "dependencies": ["./backend"],
+  "graphs": {
+    "paper_radar": "./backend/app/agents/graph.py:graph"
+  },
+  "env": "./backend/.env"
+}

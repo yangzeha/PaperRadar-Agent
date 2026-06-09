@@ -6,6 +6,7 @@ import time
 
 from langchain_core.messages import HumanMessage
 
+from app.agents.document_selection import select_output_documents
 from app.agents.state import AgentState
 from app.services.llm_provider import extract_text, invoke_with_retry
 
@@ -41,11 +42,11 @@ def check_hallucination(state: AgentState) -> AgentState:
     start = time.perf_counter()
 
     answer = state.get("answer", "")
-    graded_documents = state.get("graded_documents", [])
+    source_documents = select_output_documents(state)
     classification = state.get("classification", "paper_search")
 
     # Skip hallucination check for general (non-research) queries
-    if classification == "general" or not graded_documents:
+    if classification == "general" or not source_documents:
         elapsed_ms = int((time.perf_counter() - start) * 1000)
         steps = list(state.get("steps", []))
         steps.append({
@@ -56,7 +57,7 @@ def check_hallucination(state: AgentState) -> AgentState:
         })
         return {**state, "hallucination_score": 0.0, "steps": steps}
 
-    sources_text = _format_sources(graded_documents)
+    sources_text = _format_sources(source_documents)
     prompt = _HALLUCINATION_PROMPT.format(sources_text=sources_text, answer=answer)
 
     response = invoke_with_retry([HumanMessage(content=prompt)])
@@ -68,7 +69,7 @@ def check_hallucination(state: AgentState) -> AgentState:
         score = min(max(float(match.group(1)), 0.0), 1.0)
     else:
         logger.warning("Could not parse hallucination score from: '%s'", raw_score)
-        score = 0.5  # default to uncertain if parsing fails
+        score = 1.0  # conservative default: uncertain should trigger regeneration
 
     elapsed_ms = int((time.perf_counter() - start) * 1000)
     logger.info("Hallucination score: %.2f in %dms", score, elapsed_ms)

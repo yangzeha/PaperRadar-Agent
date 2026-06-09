@@ -1,238 +1,261 @@
-# ScholarAgent -- Agentic RAG Research Assistant
+# PaperRadar-Agent
 
-![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Next.js](https://img.shields.io/badge/Next.js-14-000000?logo=next.js&logoColor=white)
-![LangGraph](https://img.shields.io/badge/LangGraph-Agentic_RAG-1C3C3C?logo=langchain&logoColor=white)
-![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector_Store-FF6F00)
-![License](https://img.shields.io/badge/License-MIT-green)
+基于 ScholarAgent 二次开发的中文论文雷达与选题追踪 Agent。项目保留 LangGraph Agentic RAG 图流程，并扩展中文 PaperRadar 报告、长期记忆、国内模型 Provider 和 mock/real 两种运行模式。
 
-An intelligent research assistant that searches arXiv and PubMed, retrieves relevant papers, and generates cited answers using a 7-node agentic RAG pipeline built with LangGraph.
+## Mock 模式 vs Real 模式
 
-![ScholarAgent Demo](docs/screenshot.png)
+### Mock 模式
 
----
+`LLM_PROVIDER=mock` 是本地演示和测试模式：
 
-## Architecture
+- 不需要 DeepSeek/Qwen/Gemini API key。
+- 不需要 ChromaDB、sentence-transformers、embedding 模型下载。
+- 不真实调用 arXiv/PubMed。
+- Retriever 会返回固定样例论文，LLM Provider 会返回稳定 mock 文本。
+- 适合本地展示 UI、跑 pytest、跑 smoke、讲清 LangGraph 流程。
 
-```
-Query --> Router --> Retriever --> Grader --(relevant)--> Generator --> Hallucination Checker --> Synthesizer --> Response
-                                    |                        ^
-                                    |(irrelevant)            |
-                                    v                        |
-                                 Rewriter -------------------+
-                              (max 2 retries)
-```
+注意：mock 模式不是「真实 RAG」，不能把 mock 结果当成真实论文检索结果。
 
-| Node | Responsibility |
-|------|---------------|
-| **Router** | Classifies the query as `paper_search` or `general` conversation |
-| **Retriever** | Fetches papers from arXiv/PubMed, embeds them in ChromaDB, retrieves top-k |
-| **Grader** | LLM judges each document for relevance to the query |
-| **Rewriter** | Rewrites the query with better keywords if grading fails (up to 2 retries) |
-| **Generator** | Produces a cited answer grounded in the graded documents |
-| **Hallucination Checker** | Scores answer groundedness (0.0-1.0); retries generation if hallucinated |
-| **Synthesizer** | Cleans citations, removes dangling references, finalizes the response |
+### Real 模式
 
----
+`LLM_PROVIDER=deepseek|qwen|gemini` 是真实检索模式：
 
-## Features
+- 真实调用 arXiv/PubMed。
+- 使用 ChromaDB 持久化向量库。
+- 使用 sentence-transformers 生成 embedding。
+- 使用配置的 LLM Provider 生成 PaperRadar 报告。
+- 适合最终简历 Demo 和真实验收。
 
-- **Multi-source search** -- Parallel queries to arXiv and PubMed with merged results
-- **Agentic RAG pipeline** -- 7-node LangGraph state machine with conditional routing
-- **Self-correcting** -- Automatic query rewriting when retrieved papers are irrelevant
-- **Hallucination detection** -- LLM-based grounding check with configurable threshold
-- **Real-time streaming** -- WebSocket endpoint streams agent steps to the frontend
-- **3-model cascade** -- Gemini 2.5 Flash → 2.0 Flash → 2.0 Flash-Lite with automatic failover on rate limits
-- **Vector search** -- ChromaDB with HuggingFace sentence-transformers embeddings
-- **Inline citations** -- Answer references papers as [1], [2], etc. with URLs
+说明：arXiv 官方公开端点偶尔会返回 429/503。真实 smoke 不会退回 mock；如果官方端点被限流，会使用 OpenAlex 真实论文元数据兜底，并在输出中标记 `arxiv_status=ok_openalex_fallback`。
 
----
+## 功能
 
-## Tech Stack
+- 中文论文雷达：方向概览、方法路线分类、代表论文推荐、近年趋势、研究空白、两周阅读路线、可做小项目建议、参考来源。
+- LangGraph 流程：Router、Retriever、Grader、Rewriter、Generator、Hallucination Checker、Synthesizer。
+- 长短期记忆：短期状态在 LangGraph state，长期记忆写入 `backend/data/memory/*.json`。
+- 记忆 API：topics、saved papers、history。
+- 国内模型：DeepSeek 和 Qwen/DashScope 走 OpenAI-compatible API。
+- 前端状态提示：页面会显示当前为 mock 演示模式，或显示真实 provider 名称。
 
-| Layer | Technology |
-|-------|-----------|
-| **Agent Framework** | LangGraph (state machine with conditional edges) |
-| **LLM** | Google Gemini 2.5 Flash (primary) / 2.0 Flash / 2.0 Flash-Lite (cascade fallback) |
-| **Embeddings** | HuggingFace `all-MiniLM-L6-v2` (sentence-transformers) |
-| **Vector Store** | ChromaDB (persistent, local) |
-| **Backend** | FastAPI, uvicorn, httpx, arxiv library |
-| **Frontend** | Next.js 14, TypeScript, Tailwind CSS, shadcn/ui |
-| **Data Sources** | arXiv API, PubMed E-utilities (NCBI) |
-| **CI/CD** | GitHub Actions (Python 3.11/3.12 matrix + Node 20) |
-| **Containerization** | Docker, Docker Compose |
+## PaperRadar 报告质量标准
 
----
+PaperRadar 不是简单论文列表，而是“方向雷达”。合格报告必须：
 
-## Quick Start
+- 固定输出 8 个章节：方向概览、方法路线分类、代表论文推荐、近年趋势、研究空白、两周阅读路线、可做小项目建议、参考来源。
+- “方法路线分类”必须是路线表，覆盖 Survey / Taxonomy、Planning / Reasoning、Multi-Agent / Hierarchical、Multimodal、Evaluation / Benchmark、Domain-specific 等实际检索到的路线。
+- “代表论文推荐”必须解释为什么代表该方向，而不是截断摘要。
+- “近年趋势”要按年份或阶段归纳，并绑定引用。
+- “研究空白”至少给出 5 个具体 gap，每个 gap 包含现状、缺口、可验证方式和两周 demo。
+- “两周阅读路线”必须按学习目标安排，不按论文编号机械排序。
+- “可做小项目建议”必须贴合 Agentic RAG、LangGraph、RAG、多 Agent、长短期记忆、citation grounding 或 query rewrite。
+- “参考来源”必须尽量包含 title、authors、year/published date、source、url。
+- mock 模式和 real 模式都必须遵守同一报告结构；mock 只影响数据来源，不降低报告结构要求。
 
-### Option 1: Docker Compose (recommended)
+## Windows 安装
 
-```bash
-# Clone the repository
-git clone https://github.com/shinegami-2002/scholar-agent.git
-cd scholar-agent
+建议先使用 Python 3.11 或 3.12。真实 RAG 依赖比较重，尤其是 ChromaDB、sentence-transformers 和 PyTorch 相关下载，第一次安装可能较慢。
 
-# Create environment file
-cp backend/.env.example .env
-# Edit .env and add your GOOGLE_API_KEY
+### 1. 后端基础依赖，支持 mock Demo
 
-# Start both services
-docker compose up --build
-```
-
-The frontend will be available at `http://localhost:3000` and the API at `http://localhost:8000`.
-
-### Option 2: Manual Setup
-
-**Backend:**
-
-```bash
+```powershell
 cd backend
 python -m venv .venv
-source .venv/bin/activate    # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e .
+copy .env.example .env
+```
 
-# Create .env file
-cp .env.example .env
-# Edit .env and add your GOOGLE_API_KEY
+启动：
 
+```powershell
 uvicorn app.main:app --reload
 ```
 
-**Frontend:**
+### 2. 测试依赖
 
-```bash
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[test]"
+pytest
+```
+
+### 3. 真实 RAG 依赖
+
+如果 `pip install -e ".[dev]"` 超时，不要一次性装全量，按下面拆开：
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[rag]"
+python -m pip install -e ".[providers]"
+```
+
+最小真实检索依赖也可以手动安装：
+
+```powershell
+python -m pip install chromadb sentence-transformers arxiv langchain-chroma langchain-community httpx
+```
+
+如果国内网络慢，可以加镜像：
+
+```powershell
+python -m pip install -e ".[rag]" -i https://pypi.tuna.tsinghua.edu.cn/simple
+python -m pip install -e ".[providers]" -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+依赖组说明：
+
+- 基础依赖：FastAPI、LangGraph、httpx、pydantic-settings，用于 mock Demo。
+- `.[rag]`：arXiv、ChromaDB、langchain-chroma、sentence-transformers，用于真实检索。
+- `.[providers]`：Gemini 的 LangChain Provider；DeepSeek/Qwen 只依赖基础 httpx。
+- `.[test]`：pytest、pytest-asyncio、respx、ruff。
+- `.[dev]`：全量开发依赖，不建议网络慢时直接安装。
+
+## 前端启动
+
+```powershell
 cd frontend
-npm install
+npm install --registry=https://registry.npmmirror.com
 npm run dev
 ```
 
----
+打开 `http://localhost:3000`。
 
-## Environment Variables
+## LangGraph Studio 可视化
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GOOGLE_API_KEY` | Yes | Google Gemini API key ([get one free](https://aistudio.google.com)) |
-| `CHROMA_PERSIST_DIR` | No | ChromaDB storage path (default: `./data/chroma`) |
-| `LLM_TEMPERATURE` | No | LLM temperature (default: `0.1`) |
-| `MAX_PAPERS` | No | Papers per source (default: `10`) |
-| `TOP_K_RESULTS` | No | Vector search top-k (default: `5`) |
+项目根目录已经提供 `langgraph.json`，会把 `paper_radar` 图指向
+`backend/app/agents/graph.py:graph`。启动后可以在 Studio 里查看节点、边、
+运行状态和每一步的 state。
 
----
+先安装 Studio CLI：
 
-## API Endpoints
-
-### `GET /health`
-
-Health check endpoint.
-
-```json
-{ "status": "healthy", "service": "scholar-agent" }
-```
-
-### `POST /api/search`
-
-Run the full agent pipeline.
-
-**Request:**
-```json
-{
-  "query": "transformer architecture for protein folding",
-  "sources": ["arxiv", "pubmed"],
-  "max_results": 10
-}
-```
-
-**Response:**
-```json
-{
-  "query": "transformer architecture for protein folding",
-  "answer": "Recent research has demonstrated that transformer architectures... [1] [2]",
-  "citations": [
-    { "index": 1, "title": "AlphaFold2...", "url": "https://arxiv.org/abs/..." }
-  ],
-  "papers": [...],
-  "steps": [
-    { "node": "router", "status": "completed", "detail": "paper_search", "duration_ms": 120 }
-  ],
-  "rewrite_count": 0
-}
-```
-
-### `WebSocket /ws/search`
-
-Stream agent execution steps in real time. Send a `SearchRequest` JSON; receive `{"type": "step", "data": {...}}` messages followed by a final `{"type": "result", "data": {...}}`.
-
----
-
-## Running Tests
-
-```bash
+```powershell
 cd backend
-pip install -e ".[dev]"
-pytest --tb=short -q
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[studio]"
 ```
 
-Lint:
+从项目根目录启动 LangGraph Server：
 
-```bash
-ruff check app/ tests/
+```powershell
+cd ..
+$env:PYTHONUTF8="1"
+$env:PYTHONIOENCODING="utf-8"
+.\backend\.venv\Scripts\langgraph.exe dev --allow-blocking --no-browser --port 2024 --config langgraph.json
 ```
 
----
+打开：
 
-## Project Structure
+- Studio UI：`https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024`
+- API Docs：`http://127.0.0.1:2024/docs`
+- 健康检查：`http://127.0.0.1:2024/ok`
 
-```
-scholar-agent/
-|-- backend/
-|   |-- app/
-|   |   |-- agents/
-|   |   |   |-- nodes/
-|   |   |   |   |-- router.py          # Query classifier
-|   |   |   |   |-- retriever.py       # Paper fetcher + vector indexing
-|   |   |   |   |-- grader.py          # Relevance grading
-|   |   |   |   |-- rewriter.py        # Query rewriting
-|   |   |   |   |-- generator.py       # Answer generation with citations
-|   |   |   |   |-- hallucination_checker.py
-|   |   |   |   |-- synthesizer.py     # Final response cleanup
-|   |   |   |-- graph.py               # LangGraph state machine
-|   |   |   |-- state.py               # AgentState TypedDict
-|   |   |-- models/
-|   |   |   |-- schemas.py             # Pydantic models
-|   |   |-- services/
-|   |   |   |-- paper_fetcher.py       # arXiv + PubMed clients
-|   |   |   |-- vector_store.py        # ChromaDB wrapper
-|   |   |   |-- llm_provider.py        # Gemini/Groq factory
-|   |   |   |-- embeddings.py          # HuggingFace embeddings
-|   |   |-- config.py                  # Settings from env
-|   |   |-- main.py                    # FastAPI app
-|   |-- tests/                         # pytest test suite
-|   |-- pyproject.toml
-|   |-- Dockerfile
-|-- frontend/
-|   |-- app/                           # Next.js 14 app router
-|   |-- components/
-|   |   |-- search-bar.tsx             # AI prompt-style search input
-|   |   |-- thinking-steps.tsx         # Collapsible agent pipeline viewer
-|   |   |-- answer-panel.tsx           # Markdown answer with citations
-|   |   |-- source-list.tsx            # Paper result cards grid
-|   |   |-- header.tsx                 # Navigation header
-|   |   |-- ui/                        # shadcn/ui + custom components
-|   |-- lib/
-|   |   |-- api.ts                     # Typed API client
-|   |   |-- types.ts                   # TypeScript interfaces
-|   |-- Dockerfile
-|   |-- package.json
-|-- docker-compose.yml
-|-- .github/workflows/ci.yml
-|-- README.md
+说明：Windows 终端默认 GBK 编码可能导致 LangGraph CLI 读取 Unicode 文本时报错，
+所以建议设置 `PYTHONUTF8=1` 和 `PYTHONIOENCODING=utf-8`。
+如果只是演示，不需要热更新，可以在命令末尾加 `--no-reload`，避免日志文件或缓存变更触发反复重载。
+前端右上角的 `Studio` 按钮也会跳到这个 Studio UI。
+
+## 模型配置
+
+Mock：
+
+```env
+LLM_PROVIDER=mock
 ```
 
----
+DeepSeek：
 
-## License
+```env
+LLM_PROVIDER=deepseek
+LLM_MODEL_ID=deepseek-chat
+LLM_API_KEY=你的_key
+LLM_BASE_URL=https://api.deepseek.com
+```
 
-MIT
+DeepSeek 同时兼容旧变量 `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL`，但通用变量优先。`LLM_BASE_URL` 可以填 `https://api.deepseek.com`、`https://api.deepseek.com/v1` 或完整 `/chat/completions`，代码会自动补齐。
+
+Qwen/DashScope：
+
+```env
+LLM_PROVIDER=qwen
+LLM_MODEL_ID=qwen-plus
+LLM_API_KEY=你的_key
+LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+```
+
+Qwen 同时兼容旧变量 `DASHSCOPE_API_KEY`、`QWEN_BASE_URL`、`QWEN_MODEL`，但通用变量优先。`LLM_BASE_URL` 可以填 `https://dashscope.aliyuncs.com`、`https://dashscope.aliyuncs.com/compatible-mode/v1` 或完整 `/chat/completions`，代码会自动补齐。
+
+Gemini：
+
+```env
+LLM_PROVIDER=gemini
+LLM_API_KEY=你的_key
+LLM_MODEL_ID=gemini-2.5-flash
+```
+
+## 验证命令
+
+后端测试：
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+pytest
+```
+
+Mock PaperRadar：
+
+```powershell
+python scripts/smoke_paper_radar.py
+```
+
+PaperRadar 报告质量：
+
+```powershell
+python scripts/smoke_report_quality.py
+```
+
+Provider：
+
+```powershell
+python scripts/smoke_provider.py
+```
+
+真实检索：
+
+```powershell
+$env:LLM_PROVIDER="deepseek"
+$env:LLM_MODEL_ID="deepseek-chat"
+$env:LLM_API_KEY="你的_key"
+$env:LLM_BASE_URL="https://api.deepseek.com"
+python scripts/smoke_real_retrieval.py
+```
+
+如果没有 API key，`smoke_provider.py` 和 `smoke_real_retrieval.py` 会输出 `SKIP`，不会失败。
+
+前端构建：
+
+```powershell
+cd frontend
+npm run build
+```
+
+## 记忆 API
+
+- `GET /api/memory/topics`
+- `POST /api/memory/topics`
+- `GET /api/memory/saved-papers`
+- `POST /api/memory/saved-papers`
+- `GET /api/memory/history`
+
+JSON 文件不存在时会自动创建；JSON 损坏时会 graceful fallback 成空结构，不会让服务崩溃。
+
+## 示例问题
+
+- `Agentic RAG 方向论文雷达：趋势、代表论文、研究空白和两周阅读路线`
+- `LLM Agent 长期记忆机制论文雷达`
+- `RAG Hallucination Evaluation 的研究趋势、代表论文和小项目建议`
+
+更多项目讲法见 [docs/PAPER_RADAR.md](docs/PAPER_RADAR.md)。

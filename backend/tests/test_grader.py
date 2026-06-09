@@ -21,7 +21,11 @@ class TestGradeDocuments:
         result = grade_documents(state)
 
         assert len(result["graded_documents"]) == len(sample_papers)
-        assert result["graded_documents"] == sample_papers
+        assert [doc["title"] for doc in result["graded_documents"]] == [
+            doc["title"] for doc in sample_papers
+        ]
+        assert all(doc["relevance_tier"] == "core" for doc in result["graded_documents"])
+        assert all(doc["relevance_score"] >= 0.55 for doc in result["graded_documents"])
 
     @patch("app.agents.nodes.grader.invoke_with_retry")
     def test_all_irrelevant(self, mock_invoke, sample_state, sample_papers):
@@ -34,6 +38,7 @@ class TestGradeDocuments:
         result = grade_documents(state)
 
         assert len(result["graded_documents"]) == 0
+        assert len(result["background_documents"]) == 0
 
     @patch("app.agents.nodes.grader.invoke_with_retry")
     def test_mixed_relevance(self, mock_invoke, sample_state, sample_papers):
@@ -60,6 +65,29 @@ class TestGradeDocuments:
         result = grade_documents(state)
 
         assert len(result["graded_documents"]) == 1
+
+    @patch("app.agents.nodes.grader.invoke_with_retry")
+    def test_score_tiers_core_background_exclude(self, mock_invoke, sample_state, sample_papers):
+        """Numeric scores should split papers into core/background/exclude."""
+        from app.agents.nodes.grader import grade_documents
+
+        mock_invoke.return_value = AIMessage(
+            content=(
+                "1: score=0.8 tier=core reason=direct\n"
+                "2: score=0.42 tier=background reason=nearby\n"
+                "3: score=0.1 tier=exclude reason=unrelated"
+            )
+        )
+
+        state = {**sample_state, "documents": sample_papers}
+        result = grade_documents(state)
+
+        assert [doc["title"] for doc in result["graded_documents"]] == [
+            sample_papers[0]["title"]
+        ]
+        assert [doc["title"] for doc in result["background_documents"]] == [
+            sample_papers[1]["title"]
+        ]
 
     @patch("app.agents.nodes.grader.invoke_with_retry")
     def test_empty_documents(self, mock_invoke, sample_state):

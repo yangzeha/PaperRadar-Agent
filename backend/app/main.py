@@ -6,9 +6,32 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from langchain_core.messages import HumanMessage
 
 from app.config import settings
-from app.models.schemas import SearchRequest, SearchResponse
+from app.models.schemas import (
+    ChatSessionCreate,
+    SavedPaperRequest,
+    SearchRequest,
+    SearchResponse,
+    TopicMemoryRequest,
+    TranslationRequest,
+    TranslationResponse,
+)
+from app.services.memory_store import (
+    append_chat_turn,
+    create_chat_session,
+    delete_chat_session,
+    extract_topics_from_text,
+    get_chat_session,
+    list_history,
+    list_chat_sessions,
+    list_saved_papers,
+    list_topics,
+    save_paper,
+    upsert_topics,
+)
+from app.services.llm_provider import extract_text, invoke_with_retry, provider_status
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +44,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="ScholarAgent API",
-    description="Agentic RAG research assistant with LangGraph",
+    title="PaperRadar-Agent API",
+    description="Chinese paper radar and topic-tracking agent with LangGraph",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -38,7 +61,13 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "service": "scholar-agent"}
+    return {"status": "healthy", "service": "paper-radar-agent"}
+
+
+@app.get("/api/provider")
+async def get_provider_status():
+    """Return current LLM provider metadata for the frontend."""
+    return provider_status()
 
 
 @app.post("/api/search", response_model=SearchResponse)
@@ -52,7 +81,14 @@ async def search(request: SearchRequest):
             query=request.query,
             sources=request.sources,
             max_results=request.max_results,
+            session_id=request.session_id,
         )
+        session = append_chat_turn(
+            session_id=request.session_id,
+            query=request.query,
+            response=response.model_dump(),
+        )
+        response.session_id = session.get("id")
     except Exception as e:
         err_str = str(e)
         if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
@@ -71,6 +107,91 @@ async def search(request: SearchRequest):
     return response
 
 
+@app.post("/api/translate", response_model=TranslationResponse)
+async def translate(request: TranslationRequest):
+    """Translate generated report text while preserving Markdown and citations."""
+    target = "English" if request.target_language == "en" else "Chinese"
+    prompt = (
+        f"Translate the following Markdown report into {target}. "
+        "Preserve all Markdown headings, lists, links, and citation markers like [1]. "
+        "Do not add new facts, remove facts, or change citation numbers.\n\n"
+        f"Report:\n{request.text}\n\nTranslation:"
+    )
+    try:
+        response = invoke_with_retry([HumanMessage(content=prompt)])
+        return TranslationResponse(
+            text=extract_text(response).strip(),
+            target_language=request.target_language,
+        )
+    except Exception as e:
+        err_str = str(e)
+        logger.error("Translation failed: %s", err_str[:300])
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Translation failed: {err_str[:200]}"},
+        )
+
+
+@app.get("/api/memory/topics")
+async def get_memory_topics():
+    """Return long-term user topic memory."""
+    return list_topics()
+
+
+@app.post("/api/memory/topics")
+async def post_memory_topics(request: TopicMemoryRequest):
+    """Add topic memory from explicit topics or a free-form text query."""
+    topics = list(request.topics)
+    if request.text:
+        topics.extend(extract_topics_from_text(request.text))
+    return upsert_topics(topics)
+
+
+@app.get("/api/memory/saved-papers")
+async def get_saved_papers():
+    """Return the saved paper/to-read list."""
+    return list_saved_papers()
+
+
+@app.post("/api/memory/saved-papers")
+async def post_saved_paper(request: SavedPaperRequest):
+    """Save a paper to the to-read list."""
+    return save_paper(request.model_dump())
+
+
+@app.get("/api/memory/history")
+async def get_reading_history():
+    """Return recent PaperRadar retrieval and reading history."""
+    return list_history()
+
+
+@app.get("/api/chat/sessions")
+async def get_chat_sessions():
+    """Return chat sessions for the left-side history list."""
+    return list_chat_sessions()
+
+
+@app.post("/api/chat/sessions")
+async def post_chat_session(request: ChatSessionCreate):
+    """Create a new chat session."""
+    return create_chat_session(request.title)
+
+
+@app.get("/api/chat/sessions/{session_id}")
+async def get_chat_session_detail(session_id: str):
+    """Return one chat session, including compressed memory and recent messages."""
+    session = get_chat_session(session_id)
+    if session is None:
+        return JSONResponse(status_code=404, content={"detail": "Chat session not found"})
+    return session
+
+
+@app.delete("/api/chat/sessions/{session_id}")
+async def delete_chat_session_endpoint(session_id: str):
+    """Delete one chat session from long-term chat memory."""
+    return delete_chat_session(session_id)
+
+
 @app.websocket("/ws/search")
 async def websocket_search(websocket: WebSocket):
     """Stream agent steps in real-time via WebSocket."""
@@ -85,13 +206,16 @@ async def websocket_search(websocket: WebSocket):
         graph = build_graph()
         initial_state: AgentState = {
             "query": request.query,
+            "original_query": request.query,
             "documents": [],
             "graded_documents": [],
+            "background_documents": [],
             "rewrite_count": 0,
             "answer": "",
             "hallucination_score": 0.0,
             "steps": [],
             "citations": [],
+            "memory_context": {},
             "sources": request.sources,
             "max_results": request.max_results,
         }
@@ -110,15 +234,22 @@ async def websocket_search(websocket: WebSocket):
                         )
                     prev_steps_count = len(steps)
 
+        from app.agents.document_selection import select_output_documents
+        from app.agents.graph import REPORT_TEMPLATE_VERSION
         from app.models.schemas import AgentStep, Citation, PaperResult
 
         response = SearchResponse(
             query=request.query,
             answer=final_state.get("answer", ""),
             citations=[Citation(**c) for c in final_state.get("citations", [])],
-            papers=[PaperResult(**p) for p in final_state.get("graded_documents", [])],
+            papers=[
+                PaperResult(**p)
+                for p in select_output_documents(final_state)
+            ],
             steps=[AgentStep(**s) for s in final_state.get("steps", [])],
             rewrite_count=final_state.get("rewrite_count", 0),
+            classification=final_state.get("classification"),
+            report_template_version=REPORT_TEMPLATE_VERSION,
         )
         await websocket.send_text(
             json.dumps({"type": "result", "data": response.model_dump()})

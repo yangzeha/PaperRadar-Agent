@@ -1,7 +1,7 @@
 [project]
-name = "scholar-agent"
+name = "paper-radar-agent"
 version = "0.1.0"
-description = "Agentic RAG research assistant with LangGraph, ChromaDB, and arXiv/PubMed integration"
+description = "Chinese PaperRadar agent with LangGraph, mock demo mode, and optional real RAG retrieval"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
@@ -12,20 +12,40 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "langgraph>=0.2.0",
-    "langchain>=0.3.0",
-    "langchain-google-genai>=2.0.0",
-    "langchain-chroma>=0.2.0",
-    "chromadb>=0.5.0",
-    "langchain-community>=0.3.0",
-    "sentence-transformers>=3.0.0",
-    "arxiv>=2.1.0",
+    "langchain-core>=0.3.0",
     "httpx>=0.28.0",
     "pydantic-settings>=2.0.0",
     "websockets>=13.0",
 ]
 
 [project.optional-dependencies]
+rag = [
+    "arxiv>=2.1.0",
+    "langchain-chroma>=0.2.0",
+    "chromadb>=0.5.0",
+    "langchain-community>=0.3.0",
+    "sentence-transformers>=3.0.0",
+]
+providers = [
+    "langchain-google-genai>=2.0.0",
+]
+studio = [
+    "langgraph-cli[inmem]",
+]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "respx>=0.22",
+    "ruff>=0.8",
+    "httpx[http2]>=0.28.0",
+]
 dev = [
+    "arxiv>=2.1.0",
+    "langchain-chroma>=0.2.0",
+    "chromadb>=0.5.0",
+    "langchain-community>=0.3.0",
+    "sentence-transformers>=3.0.0",
+    "langchain-google-genai>=2.0.0",
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "respx>=0.22",

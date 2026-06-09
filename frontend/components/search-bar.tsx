@@ -2,8 +2,16 @@
 
 import React, { useState, useRef, useEffect, useCallback, forwardRef } from "react"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
-import { ArrowUp, Search, BookOpen, FlaskConical, Settings2 } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
+import {
+  ArrowUp,
+  Search,
+  BookOpen,
+  FlaskConical,
+  Settings2,
+  Globe2,
+  RadioTower,
+} from "lucide-react"
+import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import type { SearchRequest } from "@/lib/types"
 
@@ -15,7 +23,7 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ className, ...props }, ref) => (
     <textarea
       className={cn(
-        "flex w-full rounded-md border-none bg-transparent px-3 py-2.5 text-base text-gray-100 placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 min-h-[44px] resize-none",
+        "flex w-full rounded-md border-none bg-transparent px-3 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 min-h-[44px] resize-none",
         className
       )}
       ref={ref}
@@ -38,7 +46,7 @@ const TooltipContent = forwardRef<
     ref={ref}
     sideOffset={sideOffset}
     className={cn(
-      "z-50 overflow-hidden rounded-md border border-[#333333] bg-[#1F2023] px-3 py-1.5 text-sm text-white shadow-md animate-in fade-in-0 zoom-in-95",
+      "z-50 overflow-hidden rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-md animate-in fade-in-0 zoom-in-95",
       className
     )}
     {...props}
@@ -125,7 +133,7 @@ const PromptInput = forwardRef<HTMLDivElement, PromptInputProps>(
           <div
             ref={ref}
             className={cn(
-              "rounded-3xl border border-[#444444] bg-[#1F2023] p-2 shadow-[0_8px_30px_rgba(0,0,0,0.24)] transition-all duration-300",
+              "rounded-3xl border border-slate-200 bg-white p-2 shadow-[0_18px_45px_rgba(15,23,42,0.10)] transition-all duration-300",
               className
             )}
           >
@@ -200,7 +208,7 @@ const SourceToggle: React.FC<SourceToggleProps> = ({
       "rounded-full transition-all flex items-center gap-1 px-2 py-1 border h-8",
       active
         ? `${activeBg} border-current ${activeColor}`
-        : "bg-transparent border-transparent text-[#9CA3AF] hover:text-[#D1D5DB]"
+        : "bg-transparent border-transparent text-slate-500 hover:text-slate-800"
     )}
   >
     <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
@@ -219,19 +227,9 @@ const SourceToggle: React.FC<SourceToggleProps> = ({
         {icon}
       </motion.div>
     </div>
-    <AnimatePresence>
-      {active && (
-        <motion.span
-          initial={{ width: 0, opacity: 0 }}
-          animate={{ width: "auto", opacity: 1 }}
-          exit={{ width: 0, opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="text-xs overflow-hidden whitespace-nowrap flex-shrink-0"
-        >
-          {label}
-        </motion.span>
-      )}
-    </AnimatePresence>
+    <span className="text-xs whitespace-nowrap flex-shrink-0">
+      {label}
+    </span>
   </button>
 )
 
@@ -245,37 +243,76 @@ export function SearchBar({ onSearch, isLoading }: SearchBarProps) {
   const [query, setQuery] = useState("")
   const [arxivActive, setArxivActive] = useState(true)
   const [pubmedActive, setPubmedActive] = useState(true)
-  const [maxResults, setMaxResults] = useState(10)
-  const [showSettings, setShowSettings] = useState(false)
+  const [openAlexActive, setOpenAlexActive] = useState(true)
+  const [ieeeActive, setIeeeActive] = useState(false)
+  const [maxResults, setMaxResults] = useState("10")
+
+  const activeSourceCount =
+    Number(arxivActive) +
+    Number(pubmedActive) +
+    Number(openAlexActive) +
+    Number(ieeeActive)
 
   const toggleArxiv = useCallback(() => {
     setArxivActive((prev) => {
       if (!prev) return true
-      // Don't allow deselecting all sources
-      if (!pubmedActive) return true
+      if (activeSourceCount <= 1) return true
       return false
     })
-  }, [pubmedActive])
+  }, [activeSourceCount])
 
   const togglePubmed = useCallback(() => {
     setPubmedActive((prev) => {
       if (!prev) return true
-      if (!arxivActive) return true
+      if (activeSourceCount <= 1) return true
       return false
     })
-  }, [arxivActive])
+  }, [activeSourceCount])
+
+  const toggleOpenAlex = useCallback(() => {
+    setOpenAlexActive((prev) => {
+      if (!prev) return true
+      if (activeSourceCount <= 1) return true
+      return false
+    })
+  }, [activeSourceCount])
+
+  const toggleIeee = useCallback(() => {
+    setIeeeActive((prev) => {
+      if (!prev) return true
+      if (activeSourceCount <= 1) return true
+      return false
+    })
+  }, [activeSourceCount])
 
   const handleSubmit = useCallback(() => {
-    if (!query.trim() || isLoading) return
+    const trimmedQuery = query.trim()
+    if (!trimmedQuery || isLoading) return
     const sources: string[] = []
     if (arxivActive) sources.push("arxiv")
     if (pubmedActive) sources.push("pubmed")
+    if (openAlexActive) sources.push("openalex")
+    if (ieeeActive) sources.push("ieee")
+    const requestedResults = Math.max(
+      1,
+      Math.min(Number.parseInt(maxResults, 10) || 10, 99)
+    )
+    setQuery("")
     onSearch({
-      query: query.trim(),
+      query: trimmedQuery,
       sources,
-      max_results: maxResults,
+      max_results: requestedResults,
     })
-  }, [query, isLoading, arxivActive, pubmedActive, maxResults, onSearch])
+  }, [
+    query,
+    isLoading,
+    arxivActive,
+    pubmedActive,
+    openAlexActive,
+    ieeeActive,
+    maxResults,
+    onSearch,
+  ])
 
   const hasContent = query.trim() !== ""
 
@@ -286,17 +323,17 @@ export function SearchBar({ onSearch, isLoading }: SearchBarProps) {
         onValueChange={setQuery}
         isLoading={isLoading}
         onSubmit={handleSubmit}
-        className="w-full bg-[#1F2023] border-[#444444] shadow-[0_8px_30px_rgba(0,0,0,0.24)] transition-all duration-300 ease-in-out"
+        className="w-full bg-white border-slate-200 shadow-[0_18px_45px_rgba(15,23,42,0.10)] transition-all duration-300 ease-in-out"
         disabled={isLoading}
       >
         <PromptInputTextarea
-          placeholder="Ask a research question... e.g., 'What are the latest advances in protein folding?'"
+          placeholder="输入研究方向，例如：大模型智能体记忆机制"
           className="text-base"
         />
 
-        <div className="flex items-center justify-between gap-2 p-0 pt-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 p-0 pt-2">
           {/* Left: Source toggles */}
-          <div className="flex items-center gap-1">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             <SourceToggle
               active={arxivActive}
               onClick={toggleArxiv}
@@ -333,52 +370,71 @@ export function SearchBar({ onSearch, isLoading }: SearchBarProps) {
 
             <CustomDivider />
 
-            {/* Max results toggle */}
-            <div className="flex items-center gap-0">
-              <button
-                type="button"
-                onClick={() => setShowSettings((p) => !p)}
-                className={cn(
-                  "rounded-full transition-all flex items-center gap-1 px-2 py-1 border h-8",
-                  showSettings
-                    ? "bg-[#F59E0B]/15 border-[#F59E0B] text-[#F59E0B]"
-                    : "bg-transparent border-transparent text-[#9CA3AF] hover:text-[#D1D5DB]"
-                )}
-              >
-                <div className="w-5 h-5 flex items-center justify-center">
-                  <motion.div
-                    animate={{ rotate: showSettings ? 180 : 0 }}
-                    transition={{ type: "spring", stiffness: 260, damping: 25 }}
-                  >
-                    <Settings2 className="w-4 h-4" />
-                  </motion.div>
-                </div>
-              </button>
-              <AnimatePresence>
-                {showSettings && (
-                  <motion.div
-                    initial={{ width: 0, opacity: 0 }}
-                    animate={{ width: "auto", opacity: 1 }}
-                    exit={{ width: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="overflow-hidden flex items-center gap-1.5 ml-1"
-                  >
-                    <span className="text-xs whitespace-nowrap text-[#F59E0B]">Max:</span>
-                    <select
-                      value={maxResults}
-                      onChange={(e) => setMaxResults(Number(e.target.value))}
-                      onClick={(e) => e.stopPropagation()}
-                      className="bg-[#2E3033] text-xs rounded px-1 py-0.5 border-none focus:outline-none text-gray-200"
-                      disabled={isLoading}
-                    >
-                      <option value={5}>5</option>
-                      <option value={10}>10</option>
-                      <option value={15}>15</option>
-                      <option value={20}>20</option>
-                    </select>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+            <SourceToggle
+              active={openAlexActive}
+              onClick={toggleOpenAlex}
+              icon={
+                <Globe2
+                  className={cn(
+                    "w-4 h-4",
+                    openAlexActive ? "text-[#8B5CF6]" : "text-inherit"
+                  )}
+                />
+              }
+              label="OpenAlex"
+              activeColor="text-[#8B5CF6]"
+              activeBg="bg-[#8B5CF6]/15"
+            />
+
+            <CustomDivider />
+
+            <SourceToggle
+              active={ieeeActive}
+              onClick={toggleIeee}
+              icon={
+                <RadioTower
+                  className={cn(
+                    "w-4 h-4",
+                    ieeeActive ? "text-[#EF4444]" : "text-inherit"
+                  )}
+                />
+              }
+              label="IEEE"
+              activeColor="text-[#EF4444]"
+              activeBg="bg-[#EF4444]/15"
+            />
+
+            <CustomDivider />
+
+            {/* Max results input */}
+            <div className="flex h-8 items-center gap-1.5 rounded-full border border-[#F59E0B]/40 bg-[#F59E0B]/10 px-2 text-[#B45309]">
+              <div className="w-5 h-5 flex items-center justify-center">
+                <Settings2 className="w-4 h-4" />
+              </div>
+              <span className="text-xs whitespace-nowrap">数量:</span>
+              <input
+                type="number"
+                min={1}
+                max={99}
+                value={maxResults}
+                onChange={(e) => {
+                  const value = e.target.value
+                  if (value === "") {
+                    setMaxResults("")
+                    return
+                  }
+                  const next = Math.max(
+                    1,
+                    Math.min(Number.parseInt(value, 10) || 1, 99)
+                  )
+                  setMaxResults(String(next))
+                }}
+                onBlur={() => {
+                  if (!maxResults) setMaxResults("10")
+                }}
+                disabled={isLoading}
+                className="h-6 w-14 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800 outline-none focus:border-[#F59E0B] disabled:cursor-not-allowed disabled:opacity-60"
+              />
             </div>
           </div>
 
@@ -391,8 +447,8 @@ export function SearchBar({ onSearch, isLoading }: SearchBarProps) {
                 className={cn(
                   "h-8 w-8 rounded-full inline-flex items-center justify-center transition-all duration-200",
                   hasContent && !isLoading
-                    ? "bg-white hover:bg-white/80 text-[#1F2023] cursor-pointer"
-                    : "bg-transparent text-[#9CA3AF] cursor-not-allowed opacity-50"
+                    ? "bg-slate-950 hover:bg-slate-800 text-white cursor-pointer"
+                    : "bg-transparent text-slate-400 cursor-not-allowed opacity-50"
                 )}
               >
                 {isLoading ? (
@@ -412,7 +468,7 @@ export function SearchBar({ onSearch, isLoading }: SearchBarProps) {
               </button>
             </TooltipTrigger>
             <TooltipContent side="top">
-              {isLoading ? "Searching..." : "Search papers"}
+              {isLoading ? "正在检索..." : "生成论文雷达"}
             </TooltipContent>
           </Tooltip>
         </div>

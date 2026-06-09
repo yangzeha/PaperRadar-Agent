@@ -8,10 +8,10 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "ScholarAgent - AI-Powered Research Assistant",
+  title: "PaperRadar-Agent - 中文论文雷达",
   description:
-    "Search academic papers across arXiv and PubMed with an AI agent that retrieves, grades, and synthesizes research findings.",
-  keywords: ["research", "AI", "arxiv", "pubmed", "academic", "papers"],
+    "基于 LangGraph 的中文论文雷达与选题追踪 Agent，支持论文检索、RAG、长期记忆和国内模型切换。",
+  keywords: ["PaperRadar", "Agent", "LangGraph", "RAG", "论文雷达", "选题追踪"],
 }
 
 export default function RootLayout({
@@ -20,8 +20,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.variable} font-sans antialiased`}>
+    <html lang="zh-CN">
+      <body className={`${inter.variable} bg-white text-slate-950 font-sans antialiased`}>
         {children}
       </body>
     </html>
