@@ -4,11 +4,6 @@
 
 PaperRadar-Agent 基于 ScholarAgent 二次开发，核心目标不是做一个普通“论文搜索 + 摘要总结”工具，而是把论文检索、向量召回、相关性评分、查询改写、路线分类、结构化生成、幻觉检查、引用整理和长期记忆串成一个可观测的 LangGraph Agentic RAG 工作流。
 
-这个项目适合两类人：
-
-- 使用者：想快速了解一个研究方向、找到代表论文、整理阅读路线和项目选题。
-- 面试官：可以从项目中看到候选人对 RAG、Agent workflow、LLM Provider、前后端工程、测试和可观测性的综合实现能力。
-
 ## 项目预览
 
 ### 前端界面
@@ -407,9 +402,7 @@ frontend/components/                前端组件
 README.md                           面向使用者和面试官的项目说明
 ```
 
-## 建议阅读顺序
-
-如果你是面试官或第一次看这个项目，可以按下面顺序读代码：
+## agent开发者建议阅读顺序
 
 1. `backend/app/main.py`：理解 FastAPI 如何接收请求。
 2. `backend/app/agents/graph.py`：理解 LangGraph 节点和条件边。
@@ -418,28 +411,4 @@ README.md                           面向使用者和面试官的项目说明
 5. `backend/app/agents/nodes/generator.py`、`hallucination_checker.py`、`synthesizer.py`：理解生成、幻觉检查和引用整理。
 6. `backend/app/services/memory_store.py`：理解长期记忆如何保存和压缩。
 7. `frontend/app/page.tsx`、`frontend/lib/api.ts`：理解前端如何调用后端并展示结果。
-
-## 面试讲法
-
-可以这样概括项目：
-
-```text
-PaperRadar-Agent 是一个基于 LangGraph 的中文论文雷达与选题追踪 Agent。我把普通 RAG 拆成 Router、Retriever、Grader、Rewriter、Generator、Hallucination Checker 和 Synthesizer 等节点，让论文检索、相关性过滤、查询改写、结构化生成、幻觉检查和引用整理都可观测、可调试。
-
-项目支持 DeepSeek、Qwen 和 Gemini 等 Provider，可以检索 arXiv、PubMed、OpenAlex 等论文源，并用 JSON 长期记忆保存用户关注主题、待读论文、历史检索和会话摘要。相比简单问答系统，它更强调可追踪的 Agent workflow、引用可信度和面向研究方向的结构化输出。
-```
-
-面试官如果追问技术难点，可以重点讲：
-
-- 为什么用 LangGraph：图结构更适合表达路由、重试、查询改写和质量检查。
-- 如何降低幻觉：生成后用 hallucination score 检查答案是否基于来源论文，分数过高会触发重新生成。
-- 如何保证引用可信：Generator 要求生成 `[1]`、`[2]` 引用，Synthesizer 再清理悬空引用。
-- 如何做长期记忆：用 JSON 保存主题、论文收藏、历史和会话摘要，轻量透明，适合本地项目展示。
-- 如何做工程化：提供 API schema、测试用例、前端展示、Provider 抽象和 LangGraph Studio 可视化。
-
-## 注意事项
-
-- `.env`、API key、`.venv/`、`node_modules/`、`data/`、`backend/data/` 和日志文件不要提交。
-- 真实模式会受到 API key、网络和论文源限流影响。
-- arXiv 公开端点偶尔会出现 429/503，项目会尽量使用 OpenAlex 作为真实元数据兜底。
-- 生成报告仍建议人工复核关键论文和引用，尤其是在正式科研写作中。
+，尤其是在正式科研写作中。
